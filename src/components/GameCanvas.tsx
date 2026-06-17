@@ -169,6 +169,7 @@ export default function GameCanvas({
     const leftActive = keysRef.current['ArrowLeft'] || keysRef.current['KeyA'] || activeActions[GameAction.MOVE_LEFT];
     const rightActive = keysRef.current['ArrowRight'] || keysRef.current['KeyD'] || activeActions[GameAction.MOVE_RIGHT];
     const jumpActive = keysRef.current['ArrowUp'] || keysRef.current['Space'] || keysRef.current['KeyW'] || activeActions[GameAction.JUMP];
+    const crouchActive = keysRef.current['ArrowDown'] || keysRef.current['KeyS'] || activeActions[GameAction.CROUCH];
 
     const acc = 20; 
     const dec = 0.85; 
@@ -200,6 +201,14 @@ export default function GameCanvas({
       player.isGrounded = false;
       sfx.playJump();
       spawnDustParticles(player.x + player.width / 2, player.y + player.height, '#e2e8f0');
+    }
+
+    // Crouch: shrink hitbox while grounded
+    if (crouchActive && player.isGrounded) {
+      player.height = 14; // half height
+      player.animState = 'idle';
+    } else {
+      player.height = 28; // normal height
     }
 
     if (!player.isGrounded) {
@@ -650,6 +659,7 @@ export default function GameCanvas({
     const w = p.width;
     const h = p.height;
     const isLeft = p.facing === 'left';
+    const isCrouching = h <= 14;
 
     ctx.save();
     ctx.translate(px + w / 2, py + h / 2);
@@ -657,60 +667,140 @@ export default function GameCanvas({
       ctx.scale(-1, 1);
     }
 
-    ctx.fillStyle = '#0d0d15';
-    ctx.fillRect(-8, -12, 16, 20); 
+    // Colors: Green/Teal dinosaur skin, yellow belly, red/orange spine spikes
+    const skinColor = '#00ff9d'; // Vibrant green
+    const darkSkinColor = '#00ad6b'; // Shaded green
+    const bellyColor = '#facc15'; // Yellow
+    const spikeColor = '#ff2e63'; // Pinkish-red
+    const eyeColor = '#ffffff';
+    const eyePupil = '#0d0d15';
 
-    ctx.fillStyle = '#2d2d44';
-    ctx.fillRect(-10, -13, 20, 8);
+    if (isCrouching) {
+      // --- CROUCHED DINOSAUR ---
+      // Squished horizontal body
+      ctx.fillStyle = darkSkinColor;
+      ctx.fillRect(-10, -2, 18, 8); // main back
+      ctx.fillStyle = skinColor;
+      ctx.fillRect(-9, -4, 16, 8);  // body
 
-    if (p.animState === 'jump') {
-      ctx.fillStyle = '#00ff9d'; 
-    } else if (p.animState === 'fall') {
-      ctx.fillStyle = '#ff2e63'; 
+      // Low head snout
+      ctx.fillStyle = skinColor;
+      ctx.fillRect(3, -5, 8, 5);
+      // Yellow jaw
+      ctx.fillStyle = bellyColor;
+      ctx.fillRect(4, 0, 6, 2);
+
+      // Spikes laid flat
+      ctx.fillStyle = spikeColor;
+      ctx.fillRect(-8, -6, 2, 2);
+      ctx.fillRect(-4, -6, 2, 2);
+      ctx.fillRect(0, -6, 2, 2);
+
+      // Tail stretching back
+      ctx.fillStyle = skinColor;
+      ctx.fillRect(-14, 0, 5, 4);
+      ctx.fillStyle = darkSkinColor;
+      ctx.fillRect(-15, 2, 2, 2);
+
+      // Little stubby arm
+      ctx.fillStyle = skinColor;
+      ctx.fillRect(1, 1, 3, 2);
+
+      // Crouched/bent legs
+      ctx.fillStyle = darkSkinColor;
+      ctx.fillRect(-5, 5, 4, 3);
+      ctx.fillRect(1, 5, 4, 3);
+
+      // Eye
+      ctx.fillStyle = eyeColor;
+      ctx.fillRect(5, -4, 2, 2);
+      ctx.fillStyle = eyePupil;
+      ctx.fillRect(6, -4, 1, 1);
+
     } else {
-      ctx.fillStyle = '#facc15'; 
-    }
-    ctx.fillRect(-6, -11, 14, 4);
+      // --- NORMAL STANDING/WALKING T-REX ---
+      // Main Body
+      ctx.fillStyle = darkSkinColor;
+      ctx.fillRect(-7, -8, 14, 15);
+      ctx.fillStyle = skinColor;
+      ctx.fillRect(-6, -7, 12, 13);
 
-    ctx.fillStyle = '#4a4a6a';
-    ctx.fillRect(-1, -17, 2, 4);
-    
-    const antColors = ['#00ff9d', '#ff2e63', '#facc15', '#4a4a6a'];
-    const colIdx = Math.floor(performance.now() / 200) % 4;
-    ctx.fillStyle = antColors[colIdx];
-    ctx.fillRect(-2, -20, 4, 3);
+      // Yellow belly chest
+      ctx.fillStyle = bellyColor;
+      ctx.fillRect(2, -4, 4, 8);
 
-    ctx.fillStyle = '#2d2d44';
-    ctx.fillRect(-11, -5, 3, 10);
+      // Large head & snout extending forward
+      ctx.fillStyle = skinColor;
+      ctx.fillRect(-2, -15, 12, 8); // Head block
+      ctx.fillRect(4, -12, 7, 5);   // Snout nose
+      // Lower jaw
+      ctx.fillStyle = darkSkinColor;
+      ctx.fillRect(2, -7, 8, 2);
 
-    ctx.fillStyle = '#4a4a6a';
-    if (p.animState === 'walk') {
-      const step = p.animFrame % 2;
-      if (step === 0) {
-        ctx.fillRect(-6, 8, 3, 6);
-        ctx.fillRect(2, 8, 3, 6);
+      // Spine Spikes
+      ctx.fillStyle = spikeColor;
+      ctx.fillRect(-5, -17, 2, 2); // Head spike
+      ctx.fillRect(-8, -11, 2, 2); // Neck spike
+      ctx.fillRect(-9, -5, 2, 2);  // Upper back spike
+      ctx.fillRect(-9, 1, 2, 2);   // Lower back spike
+
+      // Dinosaur Tail
+      ctx.fillStyle = skinColor;
+      ctx.fillRect(-11, -1, 5, 6);
+      ctx.fillRect(-13, 2, 3, 3);
+      ctx.fillStyle = darkSkinColor;
+      ctx.fillRect(-14, 3, 2, 2); // Tail tip
+
+      // Stubby T-Rex Arm
+      ctx.fillStyle = skinColor;
+      ctx.fillRect(4, -2, 3, 2);
+      ctx.fillStyle = darkSkinColor;
+      ctx.fillRect(6, 0, 1, 2); // claws
+
+      // Animated walking/jumping legs
+      ctx.fillStyle = darkSkinColor;
+      if (p.animState === 'walk') {
+        const step = p.animFrame % 2;
+        if (step === 0) {
+          // Left leg forward, right leg back
+          ctx.fillRect(-4, 7, 3, 6);
+          ctx.fillRect(2, 7, 3, 6);
+          // Feet
+          ctx.fillStyle = skinColor;
+          ctx.fillRect(-4, 12, 4, 2);
+          ctx.fillRect(2, 12, 4, 2);
+        } else {
+          // Right leg forward, left leg back
+          ctx.fillRect(-2, 5, 3, 8);
+          ctx.fillRect(1, 6, 3, 7);
+          // Feet
+          ctx.fillStyle = skinColor;
+          ctx.fillRect(-2, 12, 4, 2);
+          ctx.fillRect(1, 12, 4, 2);
+        }
+      } else if (p.animState === 'jump' || p.animState === 'fall') {
+        // Legs tucked/bent in mid-air
+        ctx.fillRect(-3, 7, 3, 3);
+        ctx.fillRect(1, 7, 3, 3);
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(-3, 10, 4, 2);
+        ctx.fillRect(1, 10, 4, 2);
       } else {
-        ctx.fillRect(-4, 6, 3, 8);
-        ctx.fillRect(0, 7, 3, 7);
+        // Idle legs standing straight
+        ctx.fillRect(-4, 7, 3, 6);
+        ctx.fillRect(1, 7, 3, 6);
+        // Feet
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(-4, 12, 4, 2);
+        ctx.fillRect(1, 12, 4, 2);
       }
-    } else if (p.animState === 'jump') {
-      ctx.fillRect(-5, 8, 3, 3);
-      ctx.fillRect(2, 8, 3, 3);
-      ctx.fillStyle = '#00ff9d';
-      ctx.fillRect(-5, 11, 3, 4);
-      ctx.fillRect(2, 11, 3, 4);
-    } else if (p.animState === 'fall') {
-      ctx.fillRect(-5, 8, 3, 7);
-      ctx.fillRect(2, 8, 3, 7);
-    } else {
-      ctx.fillRect(-5, 8, 3, 6);
-      ctx.fillRect(2, 8, 3, 6);
-    }
 
-    ctx.fillStyle = '#00ff9d';
-    ctx.fillRect(-2, -3, 4, 4);
-    ctx.fillStyle = '#ff2e63';
-    ctx.fillRect(-1, -2, 2, 2);
+      // Eye
+      ctx.fillStyle = eyeColor;
+      ctx.fillRect(3, -13, 3, 3);
+      ctx.fillStyle = eyePupil;
+      ctx.fillRect(4, -13, 1, 2);
+    }
 
     ctx.restore();
   };
@@ -718,6 +808,7 @@ export default function GameCanvas({
   const isLeftLit = activeActions[GameAction.MOVE_LEFT] || keysRef.current['ArrowLeft'] || keysRef.current['KeyA'];
   const isRightLit = activeActions[GameAction.MOVE_RIGHT] || keysRef.current['ArrowRight'] || keysRef.current['KeyD'];
   const isJumpLit = activeActions[GameAction.JUMP] || keysRef.current['ArrowUp'] || keysRef.current['Space'] || keysRef.current['KeyW'];
+  const isCrouchLit = activeActions[GameAction.CROUCH] || keysRef.current['ArrowDown'] || keysRef.current['KeyS'];
 
   const handleLevelSelectBtn = (lvlId: number) => {
     onLevelSelect(lvlId);
@@ -910,6 +1001,14 @@ export default function GameCanvas({
             }`}
           >
             → RIGHT
+          </span>
+          <span
+            id="kb-crouch-light"
+            className={`px-2 py-0.5 rounded transition-all font-bold ${
+              isCrouchLit ? 'bg-[#00ff9d]/20 border border-[#00ff9d] text-[#00ff9d]' : 'bg-black/50 border border-transparent text-[#4a4a6a]'
+            }`}
+          >
+            ▼ CROUCH
           </span>
         </div>
       </div>

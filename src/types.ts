@@ -11,6 +11,7 @@ export enum GameAction {
   MOVE_LEFT = 'MOVE_LEFT',
   MOVE_RIGHT = 'MOVE_RIGHT',
   JUMP = 'JUMP',
+  CROUCH = 'CROUCH',
   NEUTRAL = 'NEUTRAL'
 }
 

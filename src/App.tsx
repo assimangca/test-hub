@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { GameAction, TMConfig } from './types';
 import GameCanvas from './components/GameCanvas';
 import TeachableController from './components/TeachableController';
@@ -22,16 +22,22 @@ export default function App() {
     [GameAction.MOVE_LEFT]: false,
     [GameAction.MOVE_RIGHT]: false,
     [GameAction.JUMP]: false,
+    [GameAction.CROUCH]: false,
     [GameAction.NEUTRAL]: false,
   });
 
   // Track the configuration state globally
   const [tmConfig, setTmConfig] = useState<TMConfig>({
-    modelUrl: '',
+    modelUrl: '/model/',
     status: 'idle',
     errorMsg: null,
-    classes: [],
-    mappings: {},
+    classes: ['happy', 'sad', 'angry', 'disgust'],
+    mappings: {
+      happy: GameAction.JUMP,
+      sad: GameAction.CROUCH,
+      angry: GameAction.MOVE_LEFT,
+      disgust: GameAction.MOVE_RIGHT,
+    },
     threshold: 82,
     smoothingHistory: 3,
     isCameraActive: false
@@ -41,13 +47,13 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [showSetupGuide, setShowSetupGuide] = useState<boolean>(true);
 
-  const handleActiveActionsChange = (actions: Record<GameAction, boolean>) => {
+  const handleActiveActionsChange = useCallback((actions: Record<GameAction, boolean>) => {
     setActiveActions(actions);
-  };
+  }, []);
 
-  const updateTmConfig = (updater: (prev: TMConfig) => TMConfig) => {
+  const updateTmConfig = useCallback((updater: (prev: TMConfig) => TMConfig) => {
     setTmConfig(prev => updater(prev));
-  };
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#0d0d15] text-white flex flex-col font-mono selection:bg-[#00ff9d] selection:text-[#0d0d15] select-none">

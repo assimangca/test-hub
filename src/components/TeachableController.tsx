@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { TMConfig, GameAction } from '../types';
 import { Camera, Volume2, HelpCircle, RefreshCw, Layers, Sliders, CheckCircle2, AlertTriangle, ShieldCheck } from 'lucide-react';
 
@@ -8,18 +8,21 @@ interface TeachableControllerProps {
   onActiveActionsChange: (actions: Record<GameAction, boolean>) => void;
 }
 
-export default function TeachableController({
+export function TeachableController({
   config,
   onConfigChange,
   onActiveActionsChange
 }: TeachableControllerProps) {
   const [modelClasses, setModelClasses] = useState<string[]>([]);
-  const [predictions, setPredictions] = useState<Array<{ className: string; probability: number }>>([]);
   const [customClassInput, setCustomClassInput] = useState<string>('');
-  
+  const [hasPredictions, setHasPredictions] = useState(false);
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const modelRef = useRef<any>(null);
+  // Ref to the predictions display container — updated imperatively to avoid re-renders
+  const predDisplayRef = useRef<HTMLDivElement | null>(null);
+  const hasPredictionsRef = useRef(false);
 
   // Sound effects
   const playConfigChime = () => {
@@ -79,9 +82,8 @@ export default function TeachableController({
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        videoRef.current.play().catch(e => console.error("Video play failed:", e));
       }
-      onConfigChange(prev => ({ ...prev, isCameraActive: true }));
     } catch (err: any) {
       console.error("Camera access failed:", err);
       onConfigChange(prev => ({ 
@@ -100,7 +102,6 @@ export default function TeachableController({
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
-    onConfigChange(prev => ({ ...prev, isCameraActive: false }));
   };
 
   // Enable / disable camera on toggle
@@ -128,6 +129,8 @@ export default function TeachableController({
 
     try {
       const tmImage = await loadTMScripts();
+
+      // Support both remote CDN URLs and local /model/ paths
       const modelURL = finalUrl + "model.json";
       const metadataURL = finalUrl + "metadata.json";
       
@@ -142,13 +145,16 @@ export default function TeachableController({
       
       labels.forEach((label: string, idx: number) => {
         const lowerLabel = label.toLowerCase();
-        if (lowerLabel.includes('jump') || lowerLabel.includes('up')) {
+        // Emotion-based mappings (Teachable Machine facial expression model)
+        if (lowerLabel === 'happy' || lowerLabel.includes('jump') || lowerLabel.includes('up')) {
           initialMappings[label] = GameAction.JUMP;
-        } else if (lowerLabel.includes('left')) {
+        } else if (lowerLabel === 'sad' || lowerLabel.includes('crouch') || lowerLabel.includes('down') || lowerLabel.includes('duck')) {
+          initialMappings[label] = GameAction.CROUCH;
+        } else if (lowerLabel === 'angry' || lowerLabel.includes('left')) {
           initialMappings[label] = GameAction.MOVE_LEFT;
-        } else if (lowerLabel.includes('right')) {
+        } else if (lowerLabel === 'disgust' || lowerLabel.includes('right')) {
           initialMappings[label] = GameAction.MOVE_RIGHT;
-        } else if (lowerLabel.includes('idle') || lowerLabel.includes('neutral') || lowerLabel.includes('down') || lowerLabel.includes('stay')) {
+        } else if (lowerLabel.includes('idle') || lowerLabel.includes('neutral') || lowerLabel.includes('stay')) {
           initialMappings[label] = GameAction.NEUTRAL;
         } else {
           initialMappings[label] = actionsOrder[idx % actionsOrder.length];
@@ -175,6 +181,44 @@ export default function TeachableController({
     }
   };
 
+  // Imperative prediction display — writes directly to DOM, no React re-render
+  const updatePredDisplay = useCallback(
+    (preds: Array<{ className: string; probability: number }>, threshold: number, mappings: Record<string, GameAction>) => {
+      const container = predDisplayRef.current;
+      if (!container) return;
+
+      preds.forEach((pred, i) => {
+        const isWinner = pred.probability >= threshold / 100;
+        const mappedAct = mappings[pred.className] || 'Neutral';
+        let cell = container.children[i] as HTMLElement | undefined;
+
+        if (!cell) {
+          cell = document.createElement('div');
+          container.appendChild(cell);
+        }
+
+        cell.className = `p-2 border flex flex-col justify-between ${
+          isWinner
+            ? 'bg-[#161625] border-[#00ff9d]/60 shadow-[inset_0_0_10px_rgba(0,255,157,0.1)]'
+            : 'bg-black/45 border-[#2d2d44] opacity-50'
+        }`;
+
+        cell.innerHTML = `
+          <div style="font-size:9px;color:#6b7280;font-weight:900;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">${pred.className} → ${mappedAct}</div>
+          <div style="font-size:1.25rem;font-weight:800;margin-bottom:4px;color:${isWinner ? '#00ff9d' : 'white'}">${pred.probability.toFixed(2)}</div>
+          <div style="height:4px;background:rgba(0,0,0,.8);width:100%;overflow:hidden">
+            <div style="height:100%;width:${pred.probability * 100}%;background:${isWinner ? '#00ff9d' : '#64748b'}"></div>
+          </div>`;
+      });
+
+      // Remove stale extra cells
+      while (container.children.length > preds.length) {
+        container.removeChild(container.lastChild!);
+      }
+    },
+    []
+  );
+
   // Prediction Loop
   useEffect(() => {
     let active = true;
@@ -186,14 +230,22 @@ export default function TeachableController({
       try {
         if (videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
           const rawPredictions = await modelRef.current.predict(videoRef.current);
-          
+
           if (active) {
-            setPredictions(rawPredictions);
-            
+            // Update prediction bars imperatively — zero React renders triggered
+            updatePredDisplay(rawPredictions, config.threshold, config.mappings);
+
+            // Show the container on first prediction (one-time React state update)
+            if (!hasPredictionsRef.current) {
+              hasPredictionsRef.current = true;
+              setHasPredictions(true);
+            }
+
             const actionsState: Record<GameAction, boolean> = {
               [GameAction.MOVE_LEFT]: false,
               [GameAction.MOVE_RIGHT]: false,
               [GameAction.JUMP]: false,
+              [GameAction.CROUCH]: false,
               [GameAction.NEUTRAL]: false,
             };
 
@@ -218,21 +270,24 @@ export default function TeachableController({
           }
         }
       } catch (err) {
-        console.error("Prediction loop failed:", err);
+        console.error('Prediction loop failed:', err);
       }
     };
 
     if (config.status === 'ready' && config.isCameraActive) {
       predictionInterval = setInterval(runPrediction, 70);
+    } else {
+      // Reset display when camera turns off
+      hasPredictionsRef.current = false;
+      setHasPredictions(false);
+      if (predDisplayRef.current) predDisplayRef.current.innerHTML = '';
     }
 
     return () => {
       active = false;
-      if (predictionInterval) {
-        clearInterval(predictionInterval);
-      }
+      if (predictionInterval) clearInterval(predictionInterval);
     };
-  }, [config.status, config.isCameraActive, config.mappings, config.threshold]);
+  }, [config.status, config.isCameraActive, config.mappings, config.threshold, updatePredDisplay]);
 
   const handleAddManualClass = () => {
     if (!customClassInput.trim()) return;
@@ -369,13 +424,13 @@ export default function TeachableController({
           </div>
 
           <div className="relative border-4 border-[#2d2d44] bg-black rounded aspect-video flex items-center justify-center overflow-hidden group">
-            {/* Real Video Element */}
             <video
               ref={videoRef}
               playsInline
               muted
-              className={`absolute inset-0 w-full h-full object-cover scale-x-[-1] transition-all duration-300 ${
-                config.isCameraActive ? 'opacity-85' : 'opacity-0 pointer-events-none'
+              style={{ transform: 'scaleX(-1)', backfaceVisibility: 'hidden' }}
+              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-150 ${
+                config.isCameraActive ? 'opacity-100' : 'opacity-0 pointer-events-none'
               }`}
             />
 
@@ -441,6 +496,7 @@ export default function TeachableController({
                       <option value={GameAction.MOVE_LEFT}>← Left</option>
                       <option value={GameAction.MOVE_RIGHT}>→ Right</option>
                       <option value={GameAction.JUMP}>▲ Jump</option>
+                      <option value={GameAction.CROUCH}>▼ Crouch</option>
                     </select>
                   </div>
                 ))}
@@ -469,38 +525,13 @@ export default function TeachableController({
         </div>
       </div>
 
-      {/* CONFIDENCE DIODES AND METERS */}
-      {config.isCameraActive && config.status === 'ready' && predictions.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-[#2d2d44]">
-          {predictions.map((pred, i) => {
-            const isWinner = pred.probability >= config.threshold / 100;
-            const mappedAct = config.mappings[pred.className] || 'Neutral';
-            return (
-              <div 
-                key={i} 
-                className={`p-2 border transition-all flex flex-col justify-between ${
-                  isWinner 
-                    ? 'bg-[#161625] border-[#00ff9d]/60 shadow-[inset_0_0_10px_rgba(0,255,157,0.1)]' 
-                    : 'bg-black/45 border-[#2d2d44] opacity-50'
-                }`}
-              >
-                <div className="text-[9px] text-[#6b7280] font-black tracking-wider uppercase mb-1">
-                  {pred.className} → {mappedAct}
-                </div>
-                <div className={`text-xl font-extrabold mb-1 ${isWinner ? 'text-[#00ff9d]' : 'text-white'}`}>
-                  {pred.probability.toFixed(2)}
-                </div>
-                <div className="h-1 bg-black/80 w-full overflow-hidden">
-                  <div 
-                    className={`h-full transition-all duration-75 ${isWinner ? 'bg-[#00ff9d]' : 'bg-slate-500'}`}
-                    style={{ width: `${pred.probability * 100}%` }}
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {/* CONFIDENCE DIODES AND METERS — updated imperatively, no React re-render per frame */}
+      <div
+        ref={predDisplayRef}
+        className={`grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-[#2d2d44] ${
+          config.isCameraActive && config.status === 'ready' && hasPredictions ? '' : 'hidden'
+        }`}
+      />
 
       {/* FOOTER: CALIBRATION SLIDER */}
       <div className="border-t border-[#2d2d44] pt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between text-[10px] text-slate-400 space-y-3 sm:space-y-0">
@@ -531,3 +562,6 @@ export default function TeachableController({
     </div>
   );
 }
+
+// memo prevents App re-renders (from activeActions state) from re-rendering this component
+export default memo(TeachableController);
