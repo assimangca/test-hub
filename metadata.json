@@ -1,0 +1,6 @@
+{
+  "name": "8-Bit Gesture Platformer",
+  "description": "An interactive 8-bit platformer game controlled by webcam gestures using Teachable Machine. Map custom postures to lateral movement and jumping to collect scattered coins.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

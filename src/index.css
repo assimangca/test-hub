@@ -1,0 +1,43 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --color-cyber-bg: #0d0d15;
+  --color-cyber-card: #161625;
+  --color-cyber-border: #2d2d44;
+  --color-cyber-border-light: #4a4a6a;
+  --color-neon-green: #00ff9d;
+  --color-neon-pink: #ff2e63;
+  --color-neon-yellow: #facc15;
+}
+
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+  100% { transform: translateY(0px); }
+}
+
+.coin-float {
+  animation: float 2s ease-in-out infinite;
+}
+
+.pixel-corner {
+  box-shadow: 4px 4px 0px 0px rgba(0, 255, 157, 0.2);
+}
+
+/* Custom scrolling list styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0d0d15;
+}
+::-webkit-scrollbar-thumb {
+  background: #2d2d44;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4a4a6a;
+}
